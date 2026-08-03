@@ -6,7 +6,7 @@ const attendanceSchema = new mongoose.Schema({
   username: { type: String, required: true },
   displayName: { type: String },
   className: { type: String },
-  role: { type: String },
+  roleName: { type: String },
   status: {
     type: String,
     enum: ['present', 'bench', 'late', 'tentative', 'absent'],

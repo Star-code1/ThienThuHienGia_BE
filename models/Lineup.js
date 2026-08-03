@@ -4,7 +4,8 @@ const slotSchema = new mongoose.Schema({
   slotIndex: { type: Number, required: true },
   userId: { type: String, default: null },
   displayName: { type: String, default: '' },
-  roleOrClass: { type: String, default: '' },
+  roleName: { type: String, default: '' },
+  className: { type: String, default: '' },
   note: { type: String, default: '' },
 });
 
