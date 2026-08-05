@@ -10,6 +10,13 @@ const { uploadToCloudinary } = require('../config/cloudinary');
  */
 router.post('/upload-image', authMiddleware, async (req, res) => {
   try {
+    if (!req.user || !req.user.canEdit) {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ thành viên có vai trò Đương Gia hoặc Đường Chủ mới có quyền upload ảnh trận đấu.'
+      });
+    }
+
     const { image } = req.body;
     if (!image) {
       return res.status(400).json({ success: false, message: 'Dữ liệu ảnh không hợp lệ.' });
@@ -50,6 +57,13 @@ router.get('/', async (req, res) => {
  */
 router.post('/', authMiddleware, async (req, res) => {
   try {
+    if (!req.user || !req.user.canEdit) {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ thành viên có vai trò Đương Gia hoặc Đường Chủ mới có quyền đăng dữ liệu trận đấu.'
+      });
+    }
+
     const { matchTitle, eventDate, result, mistakes, improvements, images } = req.body;
 
     if (!matchTitle || !mistakes) {
@@ -95,16 +109,16 @@ router.post('/', authMiddleware, async (req, res) => {
  */
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
+    if (!req.user || !req.user.canEdit) {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ thành viên có vai trò Đương Gia hoặc Đường Chủ mới có quyền chỉnh sửa dữ liệu trận đấu.'
+      });
+    }
+
     const record = await MatchAnalysis.findById(req.params.id);
     if (!record) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu trận đấu.' });
-    }
-
-    const isAuthor = record.author.discordId === (req.user.discordId || req.user.id);
-    const isLeader = !!req.user.canEdit;
-
-    if (!isAuthor && !isLeader) {
-      return res.status(403).json({ success: false, message: 'Bạn không có quyền chỉnh sửa dữ liệu này.' });
     }
 
     const { matchTitle, eventDate, result, mistakes, improvements, images } = req.body;
@@ -135,16 +149,16 @@ router.put('/:id', authMiddleware, async (req, res) => {
  */
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
+    if (!req.user || !req.user.canEdit) {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ thành viên có vai trò Đương Gia hoặc Đường Chủ mới có quyền xóa dữ liệu trận đấu.'
+      });
+    }
+
     const record = await MatchAnalysis.findById(req.params.id);
     if (!record) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu trận đấu.' });
-    }
-
-    const isAuthor = record.author.discordId === (req.user.discordId || req.user.id);
-    const isLeader = !!req.user.canEdit;
-
-    if (!isAuthor && !isLeader) {
-      return res.status(403).json({ success: false, message: 'Bạn không có quyền xóa dữ liệu này.' });
     }
 
     await MatchAnalysis.findByIdAndDelete(req.params.id);
