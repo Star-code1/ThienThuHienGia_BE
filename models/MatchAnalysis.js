@@ -18,8 +18,8 @@ const matchAnalysisSchema = new mongoose.Schema(
     },
     result: {
       type: String,
-      enum: ['win', 'loss', 'draw'],
-      default: 'loss'
+      enum: ['win', 'loss', 'draw', 'thang', 'thua', 'hoa'],
+      default: 'thua'
     },
     mistakes: {
       type: String,

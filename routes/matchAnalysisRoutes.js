@@ -80,10 +80,14 @@ router.post('/', authMiddleware, async (req, res) => {
       className: req.user.className || 'Bang Chúng'
     };
 
+    let normalizedResult = result || 'thua';
+    if (normalizedResult === 'win') normalizedResult = 'thang';
+    if (normalizedResult === 'loss') normalizedResult = 'thua';
+
     const newRecord = new MatchAnalysis({
       matchTitle: matchTitle.trim(),
       eventDate: eventDate ? new Date(eventDate) : new Date(),
-      result: result || 'loss',
+      result: normalizedResult,
       mistakes,
       improvements: improvements || '',
       images: Array.isArray(images) ? images : [],
@@ -125,7 +129,12 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     if (matchTitle) record.matchTitle = matchTitle.trim();
     if (eventDate) record.eventDate = new Date(eventDate);
-    if (result) record.result = result;
+    if (result) {
+      let normResult = result;
+      if (normResult === 'win') normResult = 'thang';
+      if (normResult === 'loss') normResult = 'thua';
+      record.result = normResult;
+    }
     if (mistakes) record.mistakes = mistakes;
     if (improvements !== undefined) record.improvements = improvements;
     if (Array.isArray(images)) record.images = images;
