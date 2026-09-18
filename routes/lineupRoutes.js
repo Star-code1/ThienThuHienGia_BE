@@ -5,7 +5,7 @@ const Lineup = require('../models/Lineup');
 // GET /api/lineup/:eventId - Lấy sơ đồ đội hình đã lưu của event
 router.get('/:eventId', async (req, res) => {
   try {
-    const lineup = await Lineup.findOne({ eventId: req.params.eventId });
+    const lineup = await Lineup.findOne({ eventId: req.params.eventId }).lean();
     res.json(lineup || null);
   } catch (error) {
     res.status(500).json({ message: error.message });

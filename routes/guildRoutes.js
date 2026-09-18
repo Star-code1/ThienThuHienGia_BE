@@ -42,12 +42,25 @@ function getClassFromRoles(roleIds, nickname) {
   return 'Chưa rõ';
 }
 
+// In-memory cache for Discord guild members to avoid 700ms+ roundtrip latency
+let cachedMembersData = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
 /**
  * GET /api/guild/members
  * Fetch all guild members having "Bang Chúng" role ID (or Leader role IDs)
  * and map exact Class Role IDs to martial class
  */
 router.get('/members', async (req, res) => {
+  const now = Date.now();
+  const forceRefresh = req.query.refresh === 'true';
+
+  // Return cached result immediately if valid
+  if (!forceRefresh && cachedMembersData && (now - lastCacheTime < CACHE_TTL_MS)) {
+    return res.json(cachedMembersData);
+  }
+
   try {
     const allowedGuildId = process.env.ALLOWED_GUILD_ID;
     const botToken = process.env.DISCORD_BOT_TOKEN;
@@ -104,13 +117,21 @@ router.get('/members', async (req, res) => {
         };
       });
 
-    return res.json({
+    const result = {
       success: true,
       totalBangChungMembers: bangChungMembers.length,
       members: bangChungMembers
-    });
+    };
+
+    cachedMembersData = result;
+    lastCacheTime = Date.now();
+
+    return res.json(result);
   } catch (error) {
     console.error('Fetch Guild Members Error:', error.response?.data || error.message);
+    if (cachedMembersData) {
+      return res.json(cachedMembersData);
+    }
     return res.json({
       success: true,
       totalBangChungMembers: 0,

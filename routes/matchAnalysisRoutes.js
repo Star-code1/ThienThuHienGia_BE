@@ -39,7 +39,7 @@ router.post('/upload-image', authMiddleware, async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const list = await MatchAnalysis.find().sort({ eventDate: -1, createdAt: -1 });
+    const list = await MatchAnalysis.find().sort({ eventDate: -1, createdAt: -1 }).lean();
     return res.json({
       success: true,
       count: list.length,
