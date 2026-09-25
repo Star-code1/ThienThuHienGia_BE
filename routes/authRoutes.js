@@ -90,10 +90,14 @@ router.post('/discord', async (req, res) => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
     } catch (err) {
-      console.error('Discord Token Exchange Error:', err.response?.data || err.message);
-      return res.status(400).json({
+      const errData = err.response?.data;
+      console.error('Discord Token Exchange Error:', errData || err.message);
+      const isRateLimited = errData?.message?.includes('rate limits') || err.response?.status === 429;
+      return res.status(isRateLimited ? 429 : 400).json({
         success: false,
-        message: 'Mã xác thực Discord đã hết hạn hoặc không hợp lệ. Vui lòng thử lại.'
+        message: isRateLimited
+          ? 'Máy chủ Discord đang tạm khóa kết nối (Rate Limit). Vui lòng thử lại sau ít phút hoặc Deploy lại server!'
+          : 'Mã xác thực Discord đã hết hạn hoặc không hợp lệ. Vui lòng thử lại.'
       });
     }
 

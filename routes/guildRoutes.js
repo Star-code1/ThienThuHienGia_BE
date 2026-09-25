@@ -42,10 +42,10 @@ function getClassFromRoles(roleIds, nickname) {
   return 'Chưa rõ';
 }
 
-// In-memory cache for Discord guild members to avoid 700ms+ roundtrip latency
+// In-memory cache for Discord guild members to avoid rate limits & latency
 let cachedMembersData = null;
 let lastCacheTime = 0;
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes (giảm tối đa số request gửi tới Discord API)
 
 /**
  * GET /api/guild/members
