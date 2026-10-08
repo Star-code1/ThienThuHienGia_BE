@@ -25,14 +25,15 @@ router.post('/:eventId', async (req, res) => {
       { new: true, upsert: true } // Nếu chưa có thì tự tạo mới
     );
 
-    // Kích hoạt gửi thông báo đội hình & skill sang Discord Bot (chạy ngầm không chặn response)
-    const botApiUrl = process.env.BOT_API_URL || 'http://localhost:3001';
-    axios.post(`${botApiUrl}/api/notify-lineup`, {
-      eventId,
-      lineup: { title, divisions, updatedBy },
-    }).catch((err) => {
-      console.warn(`[Backend Lineup] Không thể kích hoạt bot thông báo DM: ${err.message}`);
-    });
+    // Nếu có cấu hình BOT_API_URL thì gọi webhook trực tiếp (mặc định Bot tự đồng bộ qua MongoDB Watcher)
+    if (process.env.BOT_API_URL) {
+      axios.post(`${process.env.BOT_API_URL}/api/notify-lineup`, {
+        eventId,
+        lineup: { title, divisions, updatedBy },
+      }).catch((err) => {
+        console.warn(`[Backend Lineup] Thông báo webhook bot không thành công: ${err.message}`);
+      });
+    }
 
     res.json(lineup);
   } catch (error) {

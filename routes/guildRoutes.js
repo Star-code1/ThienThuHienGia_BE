@@ -45,20 +45,15 @@ function getClassFromRoles(roleIds, nickname) {
 // In-memory cache for Discord guild members to avoid rate limits & latency
 let cachedMembersData = null;
 let lastCacheTime = 0;
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes (giảm tối đa số request gửi tới Discord API)
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
- * GET /api/guild/members
- * Fetch all guild members having "Bang Chúng" role ID (or Leader role IDs)
- * and map exact Class Role IDs to martial class
+ * Lấy danh sách thành viên Bang Chúng (dùng chung trong Backend)
  */
-router.get('/members', async (req, res) => {
+async function getGuildMembersList(forceRefresh = false) {
   const now = Date.now();
-  const forceRefresh = req.query.refresh === 'true';
-
-  // Return cached result immediately if valid
   if (!forceRefresh && cachedMembersData && (now - lastCacheTime < CACHE_TTL_MS)) {
-    return res.json(cachedMembersData);
+    return cachedMembersData.members || [];
   }
 
   try {
@@ -66,21 +61,15 @@ router.get('/members', async (req, res) => {
     const botToken = process.env.DISCORD_BOT_TOKEN;
 
     if (!allowedGuildId || !botToken) {
-      return res.json({
-        success: true,
-        totalBangChungMembers: 0,
-        members: []
-      });
+      return cachedMembersData?.members || [];
     }
 
-    // Fetch All Server Members via Discord Bot API (up to 1000)
     const membersRes = await axios.get(`https://discord.com/api/v10/guilds/${allowedGuildId}/members?limit=1000`, {
       headers: { Authorization: `Bot ${botToken}` }
     });
 
     const allMembers = membersRes.data || [];
 
-    // Filter members with exact Role IDs
     const bangChungMembers = allMembers
       .filter((m) => {
         const roles = m.roles || [];
@@ -117,28 +106,32 @@ router.get('/members', async (req, res) => {
         };
       });
 
-    const result = {
+    cachedMembersData = {
       success: true,
       totalBangChungMembers: bangChungMembers.length,
       members: bangChungMembers
     };
-
-    cachedMembersData = result;
     lastCacheTime = Date.now();
 
-    return res.json(result);
+    return bangChungMembers;
   } catch (error) {
-    console.error('Fetch Guild Members Error:', error.response?.data || error.message);
-    if (cachedMembersData) {
-      return res.json(cachedMembersData);
-    }
-    return res.json({
-      success: true,
-      totalBangChungMembers: 0,
-      members: [],
-      error: error.message
-    });
+    console.error('Fetch Guild Members Helper Error:', error.response?.data || error.message);
+    return cachedMembersData?.members || [];
   }
+}
+
+/**
+ * GET /api/guild/members
+ */
+router.get('/members', async (req, res) => {
+  const forceRefresh = req.query.refresh === 'true';
+  const members = await getGuildMembersList(forceRefresh);
+  return res.json({
+    success: true,
+    totalBangChungMembers: members.length,
+    members: members
+  });
 });
 
 module.exports = router;
+module.exports.getGuildMembersList = getGuildMembersList;
