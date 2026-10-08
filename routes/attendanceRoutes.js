@@ -68,7 +68,8 @@ router.get('/rankings/absent', async (req, res) => {
         className: gm.className || 'Chưa rõ',
         role: gm.roleName || 'Bang Chúng',
         avatar: gm.avatar,
-        totalEvents: totalEventsCount,
+        joinedAt: gm.joinedAt || null,
+        totalEvents: 0,         // Số trận áp dụng cho thành viên (tính từ ngày vào bang)
         explicitAbsentCount: 0, // Báo vắng (-0.5đ)
         unvotedCount: 0,        // Không vote (-2đ)
         noShowCount: 0,         // Vote mà không đánh (-3đ)
@@ -84,18 +85,27 @@ router.get('/rankings/absent', async (req, res) => {
 
     // 4. Đối soát từng Event thuộc kênh mục tiêu với từng Member có role mục tiêu
     // Công thức tính điểm công tội:
-    // • Không vote: -2 điểm
+    // • Không vote: -2 điểm (chỉ phạt các trận diễn ra sau khi thành viên vào server)
     // • Báo vắng: -0.5 điểm
     // • Vote đánh / dự bị: +1 điểm
     // • Vote mà không đánh (No-Show): -3 điểm
     for (const event of events) {
       const attMapForEvent = eventAttendanceMap.get(event.messageId) || new Map();
+      const eventTime = event.date
+        ? new Date(event.date).getTime()
+        : (event.createdAt ? new Date(event.createdAt).getTime() : 0);
 
       for (const [userId, member] of membersMap.entries()) {
         const att = attMapForEvent.get(userId);
+        const memberJoinTime = member.joinedAt ? new Date(member.joinedAt).getTime() : 0;
+
+        // Nếu sự kiện diễn ra TRƯỚC KHI thành viên vào server và thành viên không có vote
+        // -> Miễn trừ hoàn toàn (không phạt không vote -2đ và không tính vào tổng trận)
+        const isEventBeforeJoined = memberJoinTime > 0 && eventTime > 0 && memberJoinTime > eventTime;
 
         if (att) {
-          // Thành viên ĐÃ VOTE
+          // Thành viên ĐÃ VOTE trong sự kiện này
+          member.totalEvents++;
           if (att.noShow) {
             // Vote đánh/dự bị nhưng BỊ ĐÁNH DẤU LÀ KHÔNG ĐÁNH (-3 điểm)
             member.noShowCount++;
@@ -122,7 +132,14 @@ router.get('/rankings/absent', async (req, res) => {
             member.lastVoteDate = att.timestamp;
           }
         } else {
-          // Thành viên KHÔNG VOTE (-2 điểm) -> Tính là Vắng mặt
+          // Thành viên KHÔNG VOTE
+          if (isEventBeforeJoined) {
+            // Sự kiện diễn ra trước khi vào bang -> Miễn trừ!
+            continue;
+          }
+
+          // Sự kiện diễn ra sau khi đã vào server -> Phạt không vote (-2 điểm) & Tính là vắng
+          member.totalEvents++;
           member.unvotedCount++;
           member.totalAbsentCount++;
         }
@@ -135,8 +152,8 @@ router.get('/rankings/absent', async (req, res) => {
       const score = (m.attendedCount * 1) + (m.explicitAbsentCount * -0.5) + (m.unvotedCount * -2) + (m.noShowCount * -3);
       const roundedScore = Math.round(score * 10) / 10;
 
-      const rate = totalEventsCount > 0
-        ? Math.round((m.totalAbsentCount / totalEventsCount) * 1000) / 10
+      const rate = m.totalEvents > 0
+        ? Math.round((m.totalAbsentCount / m.totalEvents) * 1000) / 10
         : 0;
 
       return {

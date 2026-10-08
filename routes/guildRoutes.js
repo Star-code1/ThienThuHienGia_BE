@@ -100,7 +100,8 @@ async function getMembersByRoleId(targetRoleId = '1438967271149146302', forceRef
         className: m.className || getClassFromRoles(m.roles, m.displayName || m.nickname),
         avatar: m.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`,
         roles: m.roleNames || ['Bang Chúng'],
-        roleName: m.roleName || (m.roleNames && m.roleNames.join(', ')) || 'Bang Chúng'
+        roleName: m.roleName || (m.roleNames && m.roleNames.join(', ')) || 'Bang Chúng',
+        joinedAt: m.joinedAt || null
       }));
     }
   } catch (dbErr) {
@@ -135,7 +136,8 @@ async function getMembersByRoleId(targetRoleId = '1438967271149146302', forceRef
           ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
           : `https://cdn.discordapp.com/embed/avatars/${(BigInt(m.user.id) >> 22n) % 6n}.png`,
         roles: userRoles,
-        roleName: userRoles.join(', ') || 'Bang Chúng'
+        roleName: userRoles.join(', ') || 'Bang Chúng',
+        joinedAt: m.joined_at ? new Date(m.joined_at) : null
       };
     });
 }
@@ -163,7 +165,8 @@ async function getGuildMembersList(forceRefresh = false) {
         className: m.className || getClassFromRoles(m.roles, m.displayName || m.nickname),
         avatar: m.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`,
         roles: m.roleNames || ['Bang Chúng'],
-        roleName: m.roleName || (m.roleNames && m.roleNames.join(', ')) || 'Bang Chúng'
+        roleName: m.roleName || (m.roleNames && m.roleNames.join(', ')) || 'Bang Chúng',
+        joinedAt: m.joinedAt || null
       }));
     }
   } catch (dbErr) {
@@ -205,7 +208,8 @@ async function getGuildMembersList(forceRefresh = false) {
           ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
           : `https://cdn.discordapp.com/embed/avatars/${(BigInt(m.user.id) >> 22n) % 6n}.png`,
         roles: userRoles,
-        roleName: userRoles.join(', ') || 'Bang Chúng'
+        roleName: userRoles.join(', ') || 'Bang Chúng',
+        joinedAt: m.joined_at ? new Date(m.joined_at) : null
       };
     });
 
