@@ -9,6 +9,9 @@ const eventSchema = new mongoose.Schema({
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   active: { type: Boolean, default: true },
+  remindedMilestones: { type: [Number], default: [] },
+  notified30m: { type: Boolean, default: false },
+  notified24hTentative: { type: Boolean, default: false },
 });
 
 module.exports = mongoose.model('Event', eventSchema);
