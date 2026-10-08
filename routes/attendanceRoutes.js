@@ -2,27 +2,35 @@ const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/Attendance');
 const Event = require('../models/Event');
-const { getGuildMembersList } = require('./guildRoutes');
+const { getMembersByRoleId } = require('./guildRoutes');
 
-// GET /api/attendance/rankings/absent - Bảng xếp hạng điểm danh & điểm công tội toàn diện
+// Cấu hình phạm vi đánh giá Ranking theo yêu cầu:
+// • Chỉ đánh giá các sự kiện thuộc Kênh ID: 1515709357856264212
+// • Chỉ đánh giá các thành viên sở hữu Role ID: 1438967271149146302
+const TARGET_CHANNEL_ID = '1515709357856264212';
+const TARGET_ROLE_ID = '1438967271149146302';
+
+// GET /api/attendance/rankings/absent - Bảng xếp hạng điểm danh & điểm công tội
 router.get('/rankings/absent', async (req, res) => {
   try {
     const { days, limit = 100 } = req.query;
 
-    const eventQuery = {};
+    // 1. Chỉ lấy sự kiện thuộc Kênh 1515709357856264212
+    const eventQuery = { channelId: TARGET_CHANNEL_ID };
     if (days && !isNaN(parseInt(days, 10))) {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - parseInt(days, 10));
       eventQuery.createdAt = { $gte: pastDate };
     }
 
-    // 1. Lấy tất cả sự kiện hợp lệ trong kỳ xét
     const events = await Event.find(eventQuery).sort({ createdAt: -1 }).lean();
     const totalEventsCount = events.length;
 
     if (totalEventsCount === 0) {
       return res.json({
         success: true,
+        targetChannelId: TARGET_CHANNEL_ID,
+        targetRoleId: TARGET_ROLE_ID,
         totalEvents: 0,
         totalRanked: 0,
         data: []
@@ -31,7 +39,7 @@ router.get('/rankings/absent', async (req, res) => {
 
     const eventIds = events.map((e) => e.messageId);
 
-    // 2. Lấy tất cả các lượt điểm danh của những sự kiện này
+    // 2. Lấy tất cả lượt điểm danh của các sự kiện thuộc kênh này
     const allAttendances = await Attendance.find({
       eventId: { $in: eventIds }
     }).lean();
@@ -45,14 +53,14 @@ router.get('/rankings/absent', async (req, res) => {
       eventAttendanceMap.get(att.eventId).set(att.userId, att);
     });
 
-    // 3. Lấy danh sách thành viên Bang Chúng hiện tại
-    const guildMembers = await getGuildMembersList();
+    // 3. Chỉ lấy các thành viên sở hữu Role ID 1438967271149146302
+    const targetMembers = await getMembersByRoleId(TARGET_ROLE_ID);
+    const validUserIds = new Set(targetMembers.map((m) => m.userId));
 
     // Map tổng hợp thành viên: userId -> MemberStats
     const membersMap = new Map();
 
-    // Nạp toàn bộ thành viên từ Guild
-    guildMembers.forEach((gm) => {
+    targetMembers.forEach((gm) => {
       membersMap.set(gm.userId, {
         userId: gm.userId,
         username: gm.username,
@@ -74,32 +82,8 @@ router.get('/rankings/absent', async (req, res) => {
       });
     });
 
-    // Nạp thêm những ai từng điểm danh
-    allAttendances.forEach((att) => {
-      if (!membersMap.has(att.userId)) {
-        membersMap.set(att.userId, {
-          userId: att.userId,
-          username: att.username,
-          displayName: att.displayName || att.username,
-          className: att.className || 'Chưa rõ',
-          role: att.role || 'Bang Chúng',
-          avatar: `https://cdn.discordapp.com/embed/avatars/${(BigInt(att.userId) >> 22n) % 6n}.png`,
-          totalEvents: totalEventsCount,
-          explicitAbsentCount: 0,
-          unvotedCount: 0,
-          noShowCount: 0,
-          attendedCount: 0,
-          tentativeCount: 0,
-          totalAbsentCount: 0,
-          reputationScore: 0,
-          absenceRate: 0,
-          lastAbsentDate: null,
-          lastVoteDate: null
-        });
-      }
-    });
-
-    // 4. Đối soát từng Event với từng Member để tính điểm công tội theo công thức:
+    // 4. Đối soát từng Event thuộc kênh mục tiêu với từng Member có role mục tiêu
+    // Công thức tính điểm công tội:
     // • Không vote: -2 điểm
     // • Báo vắng: -0.5 điểm
     // • Vote đánh / dự bị: +1 điểm
@@ -147,7 +131,7 @@ router.get('/rankings/absent', async (req, res) => {
 
     // 5. Tính tổng điểm công tội và tỷ lệ % vắng mặt
     const rankings = Array.from(membersMap.values()).map((m) => {
-      // Công thức tổng điểm: (Đánh/Dự bị * 1) + (Báo vắng * -0.5) + (Không vote * -2) + (Không đánh * -3)
+      // (Đánh/Dự bị * 1) + (Báo vắng * -0.5) + (Không vote * -2) + (Không đánh * -3)
       const score = (m.attendedCount * 1) + (m.explicitAbsentCount * -0.5) + (m.unvotedCount * -2) + (m.noShowCount * -3);
       const roundedScore = Math.round(score * 10) / 10;
 
@@ -162,8 +146,7 @@ router.get('/rankings/absent', async (req, res) => {
       };
     });
 
-    // Mặc định sắp xếp theo Tổng điểm tăng dần (ai bị điểm âm/thấp nhất thì đứng đầu danh sách vắng)
-    // Hoặc theo tổng số trận vắng giảm dần
+    // Mặc định sắp xếp theo tổng điểm tăng dần
     rankings.sort((a, b) => {
       return (
         a.reputationScore - b.reputationScore ||
@@ -176,6 +159,8 @@ router.get('/rankings/absent', async (req, res) => {
 
     res.json({
       success: true,
+      targetChannelId: TARGET_CHANNEL_ID,
+      targetRoleId: TARGET_ROLE_ID,
       totalEvents: totalEventsCount,
       totalRanked: finalRankings.length,
       data: finalRankings

@@ -43,81 +43,125 @@ function getClassFromRoles(roleIds, nickname) {
 }
 
 // In-memory cache for Discord guild members to avoid rate limits & latency
+let cachedRawMembers = null;
 let cachedMembersData = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
- * Lấy danh sách thành viên Bang Chúng (dùng chung trong Backend)
+ * Fetch raw Discord guild members with caching
  */
-async function getGuildMembersList(forceRefresh = false) {
+async function fetchRawGuildMembers(forceRefresh = false) {
   const now = Date.now();
-  if (!forceRefresh && cachedMembersData && (now - lastCacheTime < CACHE_TTL_MS)) {
-    return cachedMembersData.members || [];
+  if (!forceRefresh && cachedRawMembers && (now - lastCacheTime < CACHE_TTL_MS)) {
+    return cachedRawMembers;
+  }
+
+  const allowedGuildId = process.env.ALLOWED_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+
+  if (!allowedGuildId || !botToken) {
+    return cachedRawMembers || [];
   }
 
   try {
-    const allowedGuildId = process.env.ALLOWED_GUILD_ID;
-    const botToken = process.env.DISCORD_BOT_TOKEN;
-
-    if (!allowedGuildId || !botToken) {
-      return cachedMembersData?.members || [];
-    }
-
     const membersRes = await axios.get(`https://discord.com/api/v10/guilds/${allowedGuildId}/members?limit=1000`, {
       headers: { Authorization: `Bot ${botToken}` }
     });
-
-    const allMembers = membersRes.data || [];
-
-    const bangChungMembers = allMembers
-      .filter((m) => {
-        const roles = m.roles || [];
-        return (
-          roles.includes(ROLE_BANG_CHUNG) ||
-          roles.includes(ROLE_DUONG_GIA) ||
-          roles.includes(ROLE_DUONG_CHU)
-        );
-      })
-      .map((m) => {
-        const nick = m.nick || m.user.global_name || m.user.username;
-        const userRoleIds = m.roles || [];
-        const userRoles = [];
-
-        if (userRoleIds.includes(ROLE_DUONG_GIA)) userRoles.push('Đương Gia');
-        if (userRoleIds.includes(ROLE_DUONG_CHU)) userRoles.push('Đường Chủ');
-        if (userRoleIds.includes(ROLE_BANG_CHUNG)) userRoles.push('Bang Chúng');
-
-        const detectedClass = getClassFromRoles(userRoleIds, nick);
-
-        return {
-          userId: m.user.id,
-          discordId: m.user.id,
-          username: m.user.username,
-          globalName: m.user.global_name || m.user.username,
-          displayName: nick,
-          nickname: nick,
-          className: detectedClass,
-          avatar: m.user.avatar
-            ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
-            : `https://cdn.discordapp.com/embed/avatars/${(BigInt(m.user.id) >> 22n) % 6n}.png`,
-          roles: userRoles,
-          roleName: userRoles.join(', ') || 'Bang Chúng'
-        };
-      });
-
-    cachedMembersData = {
-      success: true,
-      totalBangChungMembers: bangChungMembers.length,
-      members: bangChungMembers
-    };
+    cachedRawMembers = membersRes.data || [];
     lastCacheTime = Date.now();
-
-    return bangChungMembers;
+    return cachedRawMembers;
   } catch (error) {
-    console.error('Fetch Guild Members Helper Error:', error.response?.data || error.message);
-    return cachedMembersData?.members || [];
+    console.error('Fetch Guild Members Error:', error.response?.data || error.message);
+    return cachedRawMembers || [];
   }
+}
+
+/**
+ * Lấy danh sách thành viên theo Role ID cụ thể (ví dụ: Role Bang Chúng 1438967271149146302)
+ */
+async function getMembersByRoleId(targetRoleId = '1438967271149146302', forceRefresh = false) {
+  const allMembers = await fetchRawGuildMembers(forceRefresh);
+
+  return allMembers
+    .filter((m) => (m.roles || []).includes(targetRoleId))
+    .map((m) => {
+      const nick = m.nick || m.user.global_name || m.user.username;
+      const userRoleIds = m.roles || [];
+      const userRoles = [];
+
+      if (userRoleIds.includes(ROLE_DUONG_GIA)) userRoles.push('Đương Gia');
+      if (userRoleIds.includes(ROLE_DUONG_CHU)) userRoles.push('Đường Chủ');
+      if (userRoleIds.includes(ROLE_BANG_CHUNG)) userRoles.push('Bang Chúng');
+
+      const detectedClass = getClassFromRoles(userRoleIds, nick);
+
+      return {
+        userId: m.user.id,
+        discordId: m.user.id,
+        username: m.user.username,
+        globalName: m.user.global_name || m.user.username,
+        displayName: nick,
+        nickname: nick,
+        className: detectedClass,
+        avatar: m.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
+          : `https://cdn.discordapp.com/embed/avatars/${(BigInt(m.user.id) >> 22n) % 6n}.png`,
+        roles: userRoles,
+        roleName: userRoles.join(', ') || 'Bang Chúng'
+      };
+    });
+}
+
+/**
+ * Lấy danh sách thành viên Bang Chúng (dùng chung trong Backend)
+ */
+async function getGuildMembersList(forceRefresh = false) {
+  const allMembers = await fetchRawGuildMembers(forceRefresh);
+
+  const bangChungMembers = allMembers
+    .filter((m) => {
+      const roles = m.roles || [];
+      return (
+        roles.includes(ROLE_BANG_CHUNG) ||
+        roles.includes(ROLE_DUONG_GIA) ||
+        roles.includes(ROLE_DUONG_CHU)
+      );
+    })
+    .map((m) => {
+      const nick = m.nick || m.user.global_name || m.user.username;
+      const userRoleIds = m.roles || [];
+      const userRoles = [];
+
+      if (userRoleIds.includes(ROLE_DUONG_GIA)) userRoles.push('Đương Gia');
+      if (userRoleIds.includes(ROLE_DUONG_CHU)) userRoles.push('Đường Chủ');
+      if (userRoleIds.includes(ROLE_BANG_CHUNG)) userRoles.push('Bang Chúng');
+
+      const detectedClass = getClassFromRoles(userRoleIds, nick);
+
+      return {
+        userId: m.user.id,
+        discordId: m.user.id,
+        username: m.user.username,
+        globalName: m.user.global_name || m.user.username,
+        displayName: nick,
+        nickname: nick,
+        className: detectedClass,
+        avatar: m.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
+          : `https://cdn.discordapp.com/embed/avatars/${(BigInt(m.user.id) >> 22n) % 6n}.png`,
+        roles: userRoles,
+        roleName: userRoles.join(', ') || 'Bang Chúng'
+      };
+    });
+
+  cachedMembersData = {
+    success: true,
+    totalBangChungMembers: bangChungMembers.length,
+    members: bangChungMembers
+  };
+
+  return bangChungMembers;
 }
 
 /**
@@ -135,3 +179,4 @@ router.get('/members', async (req, res) => {
 
 module.exports = router;
 module.exports.getGuildMembersList = getGuildMembersList;
+module.exports.getMembersByRoleId = getMembersByRoleId;
