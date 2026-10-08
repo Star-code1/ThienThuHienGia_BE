@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const User = require('../models/User');
 
 const ROLE_DUONG_GIA = '1438965974345842768';
 const ROLE_DUONG_CHU = '1438966724082012290';
@@ -42,14 +43,13 @@ function getClassFromRoles(roleIds, nickname) {
   return 'Chưa rõ';
 }
 
-// In-memory cache for Discord guild members to avoid rate limits & latency
+// In-memory cache for Discord guild members
 let cachedRawMembers = null;
-let cachedMembersData = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
- * Fetch raw Discord guild members with caching
+ * Fetch raw Discord guild members from Discord REST API as fallback
  */
 async function fetchRawGuildMembers(forceRefresh = false) {
   const now = Date.now();
@@ -72,15 +72,42 @@ async function fetchRawGuildMembers(forceRefresh = false) {
     lastCacheTime = Date.now();
     return cachedRawMembers;
   } catch (error) {
-    console.error('Fetch Guild Members Error:', error.response?.data || error.message);
+    console.warn('[GuildRoutes] Fetch Discord REST API Error (Rate limited or blocked):', error.response?.data?.message || error.message);
     return cachedRawMembers || [];
   }
 }
 
 /**
  * Lấy danh sách thành viên theo Role ID cụ thể (ví dụ: Role Bang Chúng 1438967271149146302)
+ * Ưu tiên đọc từ MongoDB do Bot đồng bộ để tránh bị Cloudflare 1015 trên Render
  */
 async function getMembersByRoleId(targetRoleId = '1438967271149146302', forceRefresh = false) {
+  // 1. Ưu tiên đọc từ MongoDB
+  try {
+    const dbMembers = await User.find({
+      roles: targetRoleId,
+      inGuild: true
+    }).lean();
+
+    if (dbMembers && dbMembers.length > 0) {
+      return dbMembers.map((m) => ({
+        userId: m.discordId,
+        discordId: m.discordId,
+        username: m.username,
+        globalName: m.globalName || m.username,
+        displayName: m.displayName || m.nickname || m.globalName || m.username,
+        nickname: m.nickname || '',
+        className: m.className || getClassFromRoles(m.roles, m.displayName || m.nickname),
+        avatar: m.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`,
+        roles: m.roleNames || ['Bang Chúng'],
+        roleName: m.roleName || (m.roleNames && m.roleNames.join(', ')) || 'Bang Chúng'
+      }));
+    }
+  } catch (dbErr) {
+    console.error('[GuildRoutes] Lỗi đọc User từ DB:', dbErr.message);
+  }
+
+  // 2. Fallback sang Discord REST API nếu MongoDB chưa có dữ liệu
   const allMembers = await fetchRawGuildMembers(forceRefresh);
 
   return allMembers
@@ -115,8 +142,35 @@ async function getMembersByRoleId(targetRoleId = '1438967271149146302', forceRef
 
 /**
  * Lấy danh sách thành viên Bang Chúng (dùng chung trong Backend)
+ * Ưu tiên đọc từ MongoDB do Bot đồng bộ
  */
 async function getGuildMembersList(forceRefresh = false) {
+  // 1. Ưu tiên đọc từ MongoDB
+  try {
+    const dbMembers = await User.find({
+      inGuild: true,
+      roles: { $in: [ROLE_BANG_CHUNG, ROLE_DUONG_GIA, ROLE_DUONG_CHU] }
+    }).lean();
+
+    if (dbMembers && dbMembers.length > 0) {
+      return dbMembers.map((m) => ({
+        userId: m.discordId,
+        discordId: m.discordId,
+        username: m.username,
+        globalName: m.globalName || m.username,
+        displayName: m.displayName || m.nickname || m.globalName || m.username,
+        nickname: m.nickname || '',
+        className: m.className || getClassFromRoles(m.roles, m.displayName || m.nickname),
+        avatar: m.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`,
+        roles: m.roleNames || ['Bang Chúng'],
+        roleName: m.roleName || (m.roleNames && m.roleNames.join(', ')) || 'Bang Chúng'
+      }));
+    }
+  } catch (dbErr) {
+    console.error('[GuildRoutes] Lỗi đọc User từ DB:', dbErr.message);
+  }
+
+  // 2. Fallback sang Discord REST API
   const allMembers = await fetchRawGuildMembers(forceRefresh);
 
   const bangChungMembers = allMembers
@@ -154,12 +208,6 @@ async function getGuildMembersList(forceRefresh = false) {
         roleName: userRoles.join(', ') || 'Bang Chúng'
       };
     });
-
-  cachedMembersData = {
-    success: true,
-    totalBangChungMembers: bangChungMembers.length,
-    members: bangChungMembers
-  };
 
   return bangChungMembers;
 }

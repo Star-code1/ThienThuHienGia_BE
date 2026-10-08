@@ -20,6 +20,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    displayName: {
+      type: String,
+      default: ''
+    },
     avatar: {
       type: String,
       default: ''
@@ -37,6 +41,15 @@ const userSchema = new mongoose.Schema(
         type: String
       }
     ],
+    roleNames: [
+      {
+        type: String
+      }
+    ],
+    roleName: {
+      type: String,
+      default: 'Bang Chúng'
+    },
     canEdit: {
       type: Boolean,
       default: false
@@ -46,6 +59,10 @@ const userSchema = new mongoose.Schema(
       default: true
     },
     lastLogin: {
+      type: Date,
+      default: Date.now
+    },
+    lastSyncedAt: {
       type: Date,
       default: Date.now
     }
