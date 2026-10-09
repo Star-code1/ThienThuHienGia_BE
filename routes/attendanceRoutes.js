@@ -223,6 +223,50 @@ router.put('/:eventId/toggle-no-show', async (req, res) => {
   }
 });
 
+// GET /api/attendance/:eventId/unvoted - Lấy danh sách thành viên có role mục tiêu chưa vote trong sự kiện
+router.get('/:eventId/unvoted', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { roleId = TARGET_ROLE_ID } = req.query;
+
+    const event = await Event.findOne({ messageId: eventId }).lean();
+    const eventTime = event
+      ? (event.date ? new Date(event.date).getTime() : (event.createdAt ? new Date(event.createdAt).getTime() : 0))
+      : 0;
+
+    const [targetMembers, attendances] = await Promise.all([
+      getMembersByRoleId(roleId),
+      Attendance.find({ eventId }).lean()
+    ]);
+
+    const votedUserIds = new Set(attendances.map((a) => a.userId));
+
+    const unvotedMembers = targetMembers.filter((m) => {
+      // Đã vote thì không tính là unvoted
+      if (votedUserIds.has(m.userId)) return false;
+
+      // Nếu sự kiện diễn ra trước khi thành viên vào server -> bỏ qua
+      const memberJoinTime = m.joinedAt ? new Date(m.joinedAt).getTime() : 0;
+      if (memberJoinTime > 0 && eventTime > 0 && memberJoinTime > eventTime) {
+        return false;
+      }
+
+      return true;
+    });
+
+    res.json({
+      success: true,
+      eventId,
+      targetRoleId: roleId,
+      totalUnvoted: unvotedMembers.length,
+      unvotedMembers
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách chưa vote:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // GET /api/attendance/:eventId - Lấy danh sách thành viên điểm danh của 1 event
 router.get('/:eventId', async (req, res) => {
   try {
