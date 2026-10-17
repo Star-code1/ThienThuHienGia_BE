@@ -38,3 +38,8 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# AI Prompt Context Documents
+PROJECT_PROMPT_CONTEXT.md
+*PROMPT*.md
+*prompt*.md
