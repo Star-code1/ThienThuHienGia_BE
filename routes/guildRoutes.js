@@ -64,9 +64,17 @@ async function fetchRawGuildMembers(forceRefresh = false) {
     return cachedRawMembers || [];
   }
 
+  const discordApiBase = (process.env.DISCORD_API_BASE_URL || 'https://discord.com/api/v10').replace(/\/+$/, '');
+  const discordHeaders = {
+    'User-Agent': 'DiscordBot (https://github.com/Star-code1/ThienThuHienGia_BE, 1.0.0)'
+  };
+
   try {
-    const membersRes = await axios.get(`https://discord.com/api/v10/guilds/${allowedGuildId}/members?limit=1000`, {
-      headers: { Authorization: `Bot ${botToken}` }
+    const membersRes = await axios.get(`${discordApiBase}/guilds/${allowedGuildId}/members?limit=1000`, {
+      headers: {
+        Authorization: `Bot ${botToken}`,
+        ...discordHeaders
+      }
     });
     cachedRawMembers = membersRes.data || [];
     lastCacheTime = Date.now();

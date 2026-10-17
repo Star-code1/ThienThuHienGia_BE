@@ -67,6 +67,10 @@ router.post('/discord', async (req, res) => {
     const allowedGuildId = process.env.ALLOWED_GUILD_ID;
     const botToken = process.env.DISCORD_BOT_TOKEN;
     const jwtSecret = process.env.JWT_SECRET || 'thienthumon_secret_jwt_key_2026';
+    const discordApiBase = (process.env.DISCORD_API_BASE_URL || 'https://discord.com/api/v10').replace(/\/+$/, '');
+    const discordHeaders = {
+      'User-Agent': 'DiscordBot (https://github.com/Star-code1/ThienThuHienGia_BE, 1.0.0)'
+    };
 
     if (!clientId || !clientSecret) {
       return res.status(500).json({
@@ -86,8 +90,11 @@ router.post('/discord', async (req, res) => {
 
     let tokenResponse;
     try {
-      tokenResponse = await axios.post('https://discord.com/api/v10/oauth2/token', tokenParams.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      tokenResponse = await axios.post(`${discordApiBase}/oauth2/token`, tokenParams.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...discordHeaders
+        }
       });
     } catch (err) {
       const errData = err.response?.data;
@@ -96,7 +103,7 @@ router.post('/discord', async (req, res) => {
       return res.status(isRateLimited ? 429 : 400).json({
         success: false,
         message: isRateLimited
-          ? 'Máy chủ Discord đang tạm khóa kết nối (Rate Limit). Vui lòng thử lại sau ít phút hoặc Deploy lại server!'
+          ? 'Máy chủ Discord đang tạm khóa kết nối (Rate Limit / Cloudflare Block). Vui lòng đổi Region trên Render hoặc liên hệ Admin cấu hình Proxy!'
           : 'Mã xác thực Discord đã hết hạn hoặc không hợp lệ. Vui lòng thử lại.'
       });
     }
@@ -104,12 +111,15 @@ router.post('/discord', async (req, res) => {
     const { access_token } = tokenResponse.data;
 
     // 2. Fetch User Profile
-    const userResponse = await axios.get('https://discord.com/api/v10/users/@me', {
-      headers: { Authorization: `Bearer ${access_token}` }
+    const userResponse = await axios.get(`${discordApiBase}/users/@me`, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        ...discordHeaders
+      }
     });
     const discordUser = userResponse.data;
 
-    // 3. Fetch Guild Member Details via Bot Token API
+    // 3. Fetch Guild Member Details via Bot Token API (Fallback to MongoDB User Collection)
     let guildMember = null;
     let memberRoleIds = [];
     let isBangChungMember = false;
@@ -117,22 +127,14 @@ router.post('/discord', async (req, res) => {
 
     if (allowedGuildId && botToken) {
       try {
-        const memberRes = await axios.get(`https://discord.com/api/v10/guilds/${allowedGuildId}/members/${discordUser.id}`, {
-          headers: { Authorization: `Bot ${botToken}` }
+        const memberRes = await axios.get(`${discordApiBase}/guilds/${allowedGuildId}/members/${discordUser.id}`, {
+          headers: {
+            Authorization: `Bot ${botToken}`,
+            ...discordHeaders
+          }
         });
         guildMember = memberRes.data;
         memberRoleIds = guildMember?.roles || [];
-
-        // Check required Role ID "Bang Chúng" (1438967271149146302) or Leader Role IDs
-        isBangChungMember =
-          memberRoleIds.includes(ROLE_BANG_CHUNG) ||
-          memberRoleIds.includes(ROLE_DUONG_GIA) ||
-          memberRoleIds.includes(ROLE_DUONG_CHU);
-
-        // Check Leader Role IDs: "Đương Gia" (1438965974345842768) or "Đường Chủ" (1438966724082012290)
-        canEditPermission =
-          memberRoleIds.includes(ROLE_DUONG_GIA) ||
-          memberRoleIds.includes(ROLE_DUONG_CHU);
       } catch (botErr) {
         if (botErr.response?.status === 404) {
           return res.status(403).json({
@@ -140,8 +142,30 @@ router.post('/discord', async (req, res) => {
             message: 'Tài khoản Discord của bạn chưa gia nhập Server Discord Thiên Thư Môn!'
           });
         }
-        console.warn('Bot API Member query warning:', botErr.response?.data || botErr.message);
+        console.warn('Bot API Member query warning (falling back to MongoDB):', botErr.response?.data || botErr.message);
+
+        // Fallback: Tìm trong MongoDB User collection đã được Bot đồng bộ
+        try {
+          const dbUser = await User.findOne({ discordId: discordUser.id }).lean();
+          if (dbUser && dbUser.inGuild) {
+            memberRoleIds = dbUser.roles || [];
+            console.log(`[Auth] Fallback thành công từ MongoDB cho user: ${dbUser.displayName || dbUser.username} (${discordUser.id})`);
+          }
+        } catch (dbErr) {
+          console.error('[Auth] Lỗi khi truy vấn MongoDB fallback:', dbErr.message);
+        }
       }
+
+      // Check required Role ID "Bang Chúng" (1438967271149146302) or Leader Role IDs
+      isBangChungMember =
+        memberRoleIds.includes(ROLE_BANG_CHUNG) ||
+        memberRoleIds.includes(ROLE_DUONG_GIA) ||
+        memberRoleIds.includes(ROLE_DUONG_CHU);
+
+      // Check Leader Role IDs: "Đương Gia" (1438965974345842768) or "Đường Chủ" (1438966724082012290)
+      canEditPermission =
+        memberRoleIds.includes(ROLE_DUONG_GIA) ||
+        memberRoleIds.includes(ROLE_DUONG_CHU);
     } else {
       isBangChungMember = true;
       canEditPermission = true;
