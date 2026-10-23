@@ -25,17 +25,42 @@ router.post('/:eventId', async (req, res) => {
       { new: true, upsert: true } // Nếu chưa có thì tự tạo mới
     );
 
-    // Nếu có cấu hình BOT_API_URL thì gọi webhook trực tiếp (mặc định Bot tự đồng bộ qua MongoDB Watcher)
+    // Lưu thành công và trả về dữ liệu (KHÔNG tự động gửi thông báo DM khi nhấn lưu)
+    res.json(lineup);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/lineup/:eventId/notify - Nút riêng: Kích hoạt gửi thông báo đội hình đến thành viên qua Discord DM
+router.post('/:eventId/notify', async (req, res) => {
+  const { eventId } = req.params;
+
+  try {
+    const lineup = await Lineup.findOne({ eventId });
+    if (!lineup) {
+      return res.status(404).json({ message: 'Không tìm thấy sơ đồ đội hình của chiến kỳ này.' });
+    }
+
+    const now = new Date();
+    lineup.notifyRequestedAt = now;
+    await lineup.save();
+
+    // Nếu có cấu hình BOT_API_URL thì gọi webhook trực tiếp sang Discord Bot
     if (process.env.BOT_API_URL) {
       axios.post(`${process.env.BOT_API_URL}/api/notify-lineup`, {
         eventId,
-        lineup: { title, divisions, updatedBy },
+        lineup,
       }).catch((err) => {
         console.warn(`[Backend Lineup] Thông báo webhook bot không thành công: ${err.message}`);
       });
     }
 
-    res.json(lineup);
+    res.json({
+      success: true,
+      message: 'Đã gửi yêu cầu truyền tin đội hình đến các thành viên qua Discord DM.',
+      notifyRequestedAt: now,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
