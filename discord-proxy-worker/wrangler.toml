@@ -1,0 +1,6 @@
+name = "thienthu-discord-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Workers Free Plan
+workers_dev = true

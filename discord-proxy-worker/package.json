@@ -1,0 +1,13 @@
+{
+  "name": "thienthu-discord-proxy",
+  "version": "1.0.0",
+  "description": "Discord API Reverse Proxy for ThienThuMon deployed on Cloudflare Workers",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.109.0"
+  }
+}
