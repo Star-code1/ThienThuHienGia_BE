@@ -1,4 +1,6 @@
 const express = require('express');
+const authMiddleware = require('../middleware/auth');
+const requireLeader = require('../middleware/requireLeader');
 const router = express.Router();
 const Skill = require('../models/Skill');
 const { uploadToCloudinary } = require('../config/cloudinary');
@@ -14,7 +16,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/skills/upload-icon - Upload riêng icon lên Cloudinary
-router.post('/upload-icon', async (req, res) => {
+router.post('/upload-icon', authMiddleware, requireLeader, async (req, res) => {
   try {
     const { image } = req.body;
     if (!image) {
@@ -29,7 +31,7 @@ router.post('/upload-icon', async (req, res) => {
 });
 
 // POST /api/skills - Thêm kỹ năng mới (tự động upload lên Cloudinary)
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, requireLeader, async (req, res) => {
   const { name, iconUrl, category, description } = req.body;
   if (!name || !iconUrl) {
     return res.status(400).json({ message: 'Tên kỹ năng và ảnh icon là bắt buộc' });
@@ -57,7 +59,7 @@ router.post('/', async (req, res) => {
 });
 
 // DELETE /api/skills/:id - Xoá kỹ năng
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, requireLeader, async (req, res) => {
   try {
     await Skill.findByIdAndDelete(req.params.id);
     res.json({ message: 'Đã xoá kỹ năng thành công' });

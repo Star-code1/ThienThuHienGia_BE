@@ -1,10 +1,12 @@
 const express = require('express');
+const authMiddleware = require('../middleware/auth');
+const requireLeader = require('../middleware/requireLeader');
 const router = express.Router();
 const axios = require('axios');
 const Lineup = require('../models/Lineup');
 
 // GET /api/lineup/:eventId - Lấy sơ đồ đội hình đã lưu của event
-router.get('/:eventId', async (req, res) => {
+router.get('/:eventId', authMiddleware, async (req, res) => {
   try {
     const lineup = await Lineup.findOne({ eventId: req.params.eventId }).lean();
     res.json(lineup || null);
@@ -14,9 +16,16 @@ router.get('/:eventId', async (req, res) => {
 });
 
 // POST /api/lineup/:eventId - Lưu hoặc Cập nhật sơ đồ đội hình
-router.post('/:eventId', async (req, res) => {
+router.post('/:eventId', authMiddleware, requireLeader, async (req, res) => {
   const { eventId } = req.params;
   const { title, divisions, updatedBy } = req.body;
+
+  if (!Array.isArray(divisions)) {
+    return res.status(400).json({ message: 'divisions phải là một mảng.' });
+  }
+  if (title !== undefined && (typeof title !== 'string' || title.length > 200)) {
+    return res.status(400).json({ message: 'Tiêu đề không hợp lệ.' });
+  }
 
   try {
     const lineup = await Lineup.findOneAndUpdate(
@@ -33,7 +42,7 @@ router.post('/:eventId', async (req, res) => {
 });
 
 // POST /api/lineup/:eventId/notify - Nút riêng: Kích hoạt gửi thông báo đội hình đến thành viên qua Discord DM
-router.post('/:eventId/notify', async (req, res) => {
+router.post('/:eventId/notify', authMiddleware, requireLeader, async (req, res) => {
   const { eventId } = req.params;
 
   try {

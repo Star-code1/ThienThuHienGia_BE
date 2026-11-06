@@ -1,4 +1,6 @@
 const express = require('express');
+const authMiddleware = require('../middleware/auth');
+const requireLeader = require('../middleware/requireLeader');
 const router = express.Router();
 const Attendance = require('../models/Attendance');
 const Event = require('../models/Event');
@@ -11,7 +13,7 @@ const TARGET_CHANNEL_ID = '1515709357856264212';
 const TARGET_ROLE_ID = '1438967271149146302';
 
 // GET /api/attendance/rankings/absent - Bảng xếp hạng điểm danh & điểm công tội
-router.get('/rankings/absent', async (req, res) => {
+router.get('/rankings/absent', authMiddleware, async (req, res) => {
   try {
     const { days, limit = 100 } = req.query;
 
@@ -189,7 +191,7 @@ router.get('/rankings/absent', async (req, res) => {
 });
 
 // PUT /api/attendance/:eventId/toggle-no-show - Đánh dấu/Hủy đánh dấu Vote mà không đánh (-3 điểm)
-router.put('/:eventId/toggle-no-show', async (req, res) => {
+router.put('/:eventId/toggle-no-show', authMiddleware, requireLeader, async (req, res) => {
   const { eventId } = req.params;
   const { userId, noShow, updatedBy } = req.body;
 
@@ -224,7 +226,7 @@ router.put('/:eventId/toggle-no-show', async (req, res) => {
 });
 
 // GET /api/attendance/:eventId/unvoted - Lấy danh sách thành viên có role mục tiêu chưa vote trong sự kiện
-router.get('/:eventId/unvoted', async (req, res) => {
+router.get('/:eventId/unvoted', authMiddleware, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { roleId = TARGET_ROLE_ID } = req.query;
@@ -268,7 +270,7 @@ router.get('/:eventId/unvoted', async (req, res) => {
 });
 
 // GET /api/attendance/:eventId - Lấy danh sách thành viên điểm danh của 1 event
-router.get('/:eventId', async (req, res) => {
+router.get('/:eventId', authMiddleware, async (req, res) => {
   try {
     const attendances = await Attendance.find({ eventId: req.params.eventId }).lean();
     res.json(attendances);

@@ -13,7 +13,7 @@ module.exports = function (req, res, next) {
   }
 
   try {
-    const jwtSecret = process.env.JWT_SECRET || 'thienthumon_secret_jwt_key_2026';
+    const jwtSecret = process.env.JWT_SECRET;
     const decoded = jwt.verify(token, jwtSecret);
     req.user = decoded;
     next();
