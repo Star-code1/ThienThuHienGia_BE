@@ -4,7 +4,11 @@ const requireLeader = require('../middleware/requireLeader');
 const router = express.Router();
 const Attendance = require('../models/Attendance');
 const Event = require('../models/Event');
+const User = require('../models/User');
+const Note = require('../models/Note');
+const AbsenceNote = require('../models/AbsenceNote');
 const { getMembersByRoleId } = require('./guildRoutes');
+const { createAbsenceStats, parseMonthKey } = require('../services/absenceStats');
 
 // Cấu hình phạm vi đánh giá Ranking theo yêu cầu:
 // • Chỉ đánh giá các sự kiện thuộc Kênh ID: 1515709357856264212
@@ -186,6 +190,65 @@ router.get('/rankings/absent', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Lỗi tính bảng xếp hạng vắng mặt & điểm công tội:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ── THỐNG KÊ VOTE VẮNG THEO THÁNG ────────────────────────────────────────────
+const absenceStats = createAbsenceStats({
+  Event,
+  Attendance,
+  User,
+  AbsenceNote,
+  Note,
+  channelId: TARGET_CHANNEL_ID,
+  roleId: TARGET_ROLE_ID,
+});
+
+// GET /api/attendance/absence-stats/overview?months=6&endMonth=YYYY-MM - Tổng quan vắng theo từng tháng
+router.get('/absence-stats/overview', authMiddleware, async (req, res) => {
+  try {
+    const endMonth = parseMonthKey(req.query.endMonth);
+    if (!endMonth) return res.status(400).json({ success: false, message: 'Tháng không hợp lệ (định dạng YYYY-MM).' });
+    const data = await absenceStats.getMonthlyOverview({ months: req.query.months, endMonth });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Lỗi thống kê vắng tổng quan theo tháng:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/attendance/absence-stats/month/:month - Chi tiết vắng của từng đệ tử trong tháng (YYYY-MM)
+router.get('/absence-stats/month/:month', authMiddleware, async (req, res) => {
+  try {
+    const month = parseMonthKey(req.params.month);
+    if (!month) return res.status(400).json({ success: false, message: 'Tháng không hợp lệ (định dạng YYYY-MM).' });
+    const data = await absenceStats.getMonthlyDetail(month);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Lỗi thống kê vắng chi tiết theo tháng:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/attendance/absence-stats/month/:month/note/:userId - Lưu/xoá ghi chú cho đệ tử vắng nhiều (chỉ leader)
+router.put('/absence-stats/month/:month/note/:userId', authMiddleware, requireLeader, async (req, res) => {
+  try {
+    const month = parseMonthKey(req.params.month);
+    if (!month) return res.status(400).json({ success: false, message: 'Tháng không hợp lệ (định dạng YYYY-MM).' });
+    const note = await absenceStats.setLeaderNote({
+      month,
+      userId: req.params.userId,
+      content: req.body?.content,
+      updatedBy: req.user?.nickname || req.user?.username || req.body?.updatedBy,
+    });
+    res.json({
+      success: true,
+      message: note ? 'Đã lưu ghi chú.' : 'Đã xoá ghi chú.',
+      note: note ? { content: note.content, updatedBy: note.updatedBy, updatedAt: note.updatedAt } : null,
+    });
+  } catch (error) {
+    console.error('Lỗi lưu ghi chú vắng:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
