@@ -60,6 +60,9 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const httpServer = require('http').createServer(app);
+require('./services/lineupRealtime').init(httpServer, allowedOrigins);
+
+httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

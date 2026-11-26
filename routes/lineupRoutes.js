@@ -4,6 +4,7 @@ const requireLeader = require('../middleware/requireLeader');
 const router = express.Router();
 const axios = require('axios');
 const Lineup = require('../models/Lineup');
+const realtime = require('../services/lineupRealtime');
 
 // GET /api/lineup/:eventId - Lấy sơ đồ đội hình đã lưu của event
 router.get('/:eventId', authMiddleware, async (req, res) => {
@@ -34,6 +35,9 @@ router.post('/:eventId', authMiddleware, requireLeader, async (req, res) => {
       { new: true, upsert: true } // Nếu chưa có thì tự tạo mới
     );
 
+    // Đồng bộ lại cho những người đang mở sơ đồ này (real-time)
+    realtime.replaceState(eventId, lineup.toObject()).catch(() => {});
+
     // Lưu thành công và trả về dữ liệu (KHÔNG tự động gửi thông báo DM khi nhấn lưu)
     res.json(lineup);
   } catch (error) {
@@ -46,6 +50,7 @@ router.post('/:eventId/notify', authMiddleware, requireLeader, async (req, res) 
   const { eventId } = req.params;
 
   try {
+    await realtime.flush(eventId); // đảm bảo thay đổi real-time đã nằm trong DB
     const lineup = await Lineup.findOne({ eventId });
     if (!lineup) {
       return res.status(404).json({ message: 'Không tìm thấy sơ đồ đội hình của chiến kỳ này.' });
